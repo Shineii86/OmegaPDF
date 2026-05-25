@@ -1,3 +1,11 @@
+## [2.1.0] - 2026-05-25
+- Telegram Bot integration: send PDFs directly to Telegram instead of downloading locally
+- Bot token + chat ID configuration in Setup cell with test connection button
+- "Send to Telegram" checkbox on every download cell (URL, slug, merge, batch)
+- Dedicated "Send local PDF to Telegram" cell for uploading existing files
+- New `telegram.py` module for standalone Python usage
+- Batch Telegram send with 1s delay between messages to avoid rate limits
+
 ## [2.0.0] - 2026-05-25
 - Concurrent panel downloads using ThreadPoolExecutor (up to 8x faster)
 - Auto-retry with exponential backoff on failed image downloads
