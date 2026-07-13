@@ -9,6 +9,24 @@ from PIL import Image
 
 from config import PDF_FORMAT, PDF_QUALITY, QUALITY_PRESETS, DEFAULT_QUALITY
 
+# Standard PDF page width in points (72 DPI) — A4-ish width for manhwa panels
+_PDF_PAGE_WIDTH_PT = 595  # ~210mm (A4 width)
+
+
+def _fit_image_to_page(img: Image.Image, target_width: int) -> Image.Image:
+    """Resize image so it fills exactly target_width pixels with no extra space.
+
+    For manhwa/manga panels, each image should stretch to full page width
+    with zero margins or gaps between panels.
+    """
+    orig_w, orig_h = img.size
+    if orig_w == target_width:
+        return img
+
+    scale = target_width / orig_w
+    target_height = int(orig_h * scale)
+    return img.resize((target_width, target_height), Image.LANCZOS)
+
 
 def images_to_pdf(
     image_data_list: list[bytes],
@@ -20,33 +38,28 @@ def images_to_pdf(
 ) -> str:
     """Convert a list of image byte arrays into a single PDF file.
 
-    Args:
-        image_data_list: Ordered list of raw image bytes (one per page).
-        output_path: File path for the output PDF.
-        title: PDF document title metadata.
-        author: PDF document author metadata.
-        subject: PDF document subject metadata.
-        quality: Quality preset key ('low', 'medium', 'high').
-
-    Returns:
-        The output_path string on success.
+    Each image fills the full page width — zero gaps between panels.
     """
     if not image_data_list:
         raise ValueError("No images provided for PDF generation")
 
     dpi, _ = QUALITY_PRESETS.get(quality, QUALITY_PRESETS[DEFAULT_QUALITY])
 
+    # Use a consistent pixel width so all pages align perfectly
+    # Higher DPI = more pixels = sharper output but larger file
+    pixel_width = int(_PDF_PAGE_WIDTH_PT * dpi / 72)
+
     pages: list[Image.Image] = []
     for img_bytes in image_data_list:
         img = Image.open(io.BytesIO(img_bytes))
         if img.mode == "RGBA":
             img = img.convert("RGB")
+        img = _fit_image_to_page(img, pixel_width)
         pages.append(img)
 
     first_page = pages[0]
     rest_pages = pages[1:] if len(pages) > 1 else []
 
-    # Build PDF info dict for metadata
     pdf_info = {}
     if title:
         pdf_info["Title"] = title
@@ -55,12 +68,13 @@ def images_to_pdf(
     if subject:
         pdf_info["Subject"] = subject
 
+    # resolution=72 because we already sized pixels to fill the page exactly
     first_page.save(
         output_path,
         format="PDF",
         save_all=True,
         append_images=rest_pages,
-        resolution=dpi,
+        resolution=72,
         quality=PDF_QUALITY,
         pdf_info=pdf_info or None,
     )

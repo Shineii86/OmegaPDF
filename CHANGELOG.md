@@ -1,3 +1,9 @@
+## [3.1.0] - 2026-07-13
+- Fixed panel gap issue: images now fill full page width with zero margins
+- Resized all images to consistent pixel width before PDF assembly
+- Changed resolution parameter from DPI-based to fixed 72 DPI
+- Updated both pdf_builder.py and OmegaPDF.ipynb notebook
+
 ## [3.0.0] - 2026-07-13
 - MAJOR: Removed OmegaAPI dependency — now calls OmegaScans upstream API directly
 - Inbuilt normalization logic ported from OmegaAPI (omega.ts → Python)
