@@ -1,3 +1,10 @@
+## [3.2.0] - 2026-07-13
+- New Telegram bot (bot.py) — auto-responds to OmegaScans URLs
+- Sends cover photo + Title, Description, Status, Release year, Author, Chapters count
+- [Download PDF] inline button — generates and sends PDF on click
+- [View Chapters] button for series-only URLs
+- Added python-telegram-bot dependency
+
 ## [3.1.0] - 2026-07-13
 - Fixed panel gap issue: images now fill full page width with zero margins
 - Resized all images to consistent pixel width before PDF assembly
