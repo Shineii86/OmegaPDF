@@ -1,7 +1,8 @@
-"""Simple Telegram Bot — sends comics info card when someone posts a URL.
+"""Telegram Bot for Google Colab — webhook mode (no timeout issues).
 
-Usage:
-    TG_BOT_TOKEN=your_token python bot.py
+In Colab:
+    !pip install python-telegram-bot flask pyngrok
+    %run bot.py
 """
 
 import os
@@ -10,15 +11,20 @@ import logging
 from io import BytesIO
 
 import requests
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 from config import OMEGA_BASE_URL, MEDIA_CDN, REQUEST_TIMEOUT
+from fetcher import get_chapters
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Bot")
 
 URL_RE = re.compile(r"omegascans\.org/series/(?P<slug>[^/\s]+)", re.IGNORECASE)
+
+app = Flask(__name__)
+bot_app = None
 
 
 def api(path):
@@ -49,7 +55,6 @@ def get_info(slug):
         "status": raw.get("status", ""),
         "author": raw.get("author", "") or "N/A",
         "year": raw.get("release_year", "") or "N/A",
-        "type": raw.get("series_type", ""),
         "chapters": int(meta.get("chapters_count", "0") or "0"),
     }
 
@@ -64,7 +69,7 @@ def card_text(i):
     return "\n".join(lines)
 
 
-async def msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def msg_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     m = update.message
     text = m.text or ""
     match = URL_RE.search(text)
@@ -74,7 +79,7 @@ async def msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     slug = match.group("slug")
     try:
         info = get_info(slug)
-    except Exception as e:
+    except Exception:
         await m.reply_text("❌ Error fetching info.")
         return
 
@@ -100,14 +105,13 @@ async def msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await m.reply_text(card_text(info), parse_mode="HTML", reply_markup=kb)
 
 
-async def callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     slug = q.data.split(":", 1)[1]
     await q.edit_message_reply_markup(reply_markup=None)
-    await q.message.reply_text(f"📥 Sending chapters list for <b>{slug}</b>...", parse_mode="HTML")
+    await q.message.reply_text(f"📥 Fetching chapters for <b>{slug}</b>...", parse_mode="HTML")
 
-    from fetcher import get_chapters
     try:
         ch = get_chapters(slug)
         if not ch.get("success"):
@@ -121,18 +125,42 @@ async def callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text(f"❌ {e}")
 
 
-def main():
-    token = os.environ.get("TG_BOT_TOKEN")
-    if not token:
-        print("Set TG_BOT_TOKEN env var first.")
-        return
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot_app.bot)
+    bot_app.update_queue.put_nowait(update)
+    return "ok"
 
-    app = Application.builder().token(token).build()
-    app.add_handler(CallbackQueryHandler(callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-    print("Bot running!")
-    app.run_polling()
+
+def run_bot(token, webhook_url):
+    global bot_app
+    bot_app = Application.builder().token(token).build()
+    bot_app.add_handler(CallbackQueryHandler(callback_handler))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_handler))
+
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(bot_app.initialize())
+    loop.run_until_complete(bot_app.bot.set_webhook(url=f"{webhook_url}/webhook"))
+    loop.run_until_complete(bot_app.start())
+
+    print(f"✅ Webhook set: {webhook_url}/webhook")
+    print("Bot is running! Send an OmegaScans URL in Telegram.")
+    app.run(host="0.0.0.0", port=5000)
 
 
 if __name__ == "__main__":
-    main()
+    TOKEN = os.environ.get("TG_BOT_TOKEN", "")
+    if not TOKEN:
+        TOKEN = input("Enter TG_BOT_TOKEN: ").strip()
+
+    # Auto-ngrok
+    try:
+        from pyngrok import ngrok
+        public_url = ngrok.connect(5000).public_url
+    except Exception:
+        public_url = input("Enter your public URL (e.g. from ngrok): ").strip()
+
+    run_bot(TOKEN, public_url)
