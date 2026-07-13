@@ -1,4 +1,7 @@
-"""OmegaPDF main orchestrator — ties fetching and PDF creation together."""
+"""OmegaPDF main orchestrator — ties fetching and PDF creation together.
+
+Calls OmegaScans upstream API directly (no external API dependency).
+"""
 
 from __future__ import annotations
 

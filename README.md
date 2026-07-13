@@ -5,7 +5,7 @@
 <br/>
 
 [![Open in Colab](https://img.shields.io/badge/Google-Colab-F9AB00?style=for-the-badge&logo=googlecolab&logoColor=black)](https://colab.research.google.com/github/Shineii86/OmegaPDF/blob/main/OmegaPDF.ipynb)
-[![API](https://img.shields.io/badge/API-OmegaAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://omegaapi.vercel.app)
+[![API](https://img.shields.io/badge/API-OmegaScans%20Direct-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://api.omegascans.org)
 
 <br/>
 
@@ -66,10 +66,10 @@ Paste a URL. Get a PDF. That's it.
 
 ## Overview
 
-OmegaPDF is a **Google Colab notebook** that fetches manhwa panels from [OmegaScans](https://omegascans.org) via the [OmegaAPI](https://omegaapi.vercel.app) and assembles them into clean PDF files. Upload directly to Telegram via Bot API — no local download required.
+OmegaPDF is a **Google Colab notebook** that fetches manhwa panels directly from [OmegaScans](https://omegascans.org) and assembles them into clean PDF files. Upload directly to Telegram via Bot API — no local download required.
 
 > [!NOTE]
-> **No install. No GPU. No setup.** Open the notebook in Google Colab, run the setup cell, and you're ready. Works on any device with a browser.
+> **Self-contained — no external API needed.** OmegaPDF calls the OmegaScans upstream API directly with inbuilt normalization logic (ported from OmegaAPI). No separate API server required.
 
 > [!TIP]
 > **Telegram Integration**: Skip the download step entirely. Send PDFs directly to your Telegram chat with one checkbox. Perfect for reading on mobile.
@@ -80,7 +80,7 @@ OmegaPDF is a **Google Colab notebook** that fetches manhwa panels from [OmegaSc
 |-----------|------|---------|
 | **Notebook** | `OmegaPDF.ipynb` | 10-cell Colab notebook — the main entry point |
 | **Config** | `config.py` | API endpoints, quality presets, HTTP settings |
-| **Fetcher** | `fetcher.py` | OmegaAPI client with concurrent downloads + retry |
+| **Fetcher** | `fetcher.py` | OmegaScans upstream client + normalizer + concurrent downloader |
 | **PDF Builder** | `pdf_builder.py` | Image-to-PDF assembly with metadata |
 | **Main** | `main.py` | Orchestrator tying fetcher + builder together |
 | **Telegram** | `telegram.py` | Bot API integration for direct uploads |
@@ -176,7 +176,7 @@ OmegaPDF/
 
 ```mermaid
 flowchart LR
-    A["Paste URL\nor Search"] --> B["OmegaAPI\nFetch Chapter"]
+    A["Paste URL\nor Search"] --> B["OmegaScans\nDirect API"]
     B --> C["Download\nPanels\n(8 threads)"]
     C --> D["Build PDF\n(Pillow)"]
     D --> E1["Download\nLocally"]
@@ -196,16 +196,17 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-    participant U as 👤 User
-    participant NB as 📓 Notebook
-    participant API as 🌐 OmegaAPI
-    participant CDN as 🖼️ Image CDN
-    participant PDF as 📄 PDF Builder
-    participant TG as 📱 Telegram
+    participant U as User
+    participant NB as Notebook
+    participant OS as OmegaScans API
+    participant CDN as Image CDN
+    participant PDF as PDF Builder
+    participant TG as Telegram
 
     U->>NB: Paste URL or set params
-    NB->>API: GET /api/v1/chapter/{slug}/{ch}
-    API-->>NB: Chapter data + image URLs
+    NB->>OS: GET /chapter/{slug}/{ch}
+    OS-->>NB: Raw chapter data
+    NB->>NB: Normalize (images, metadata)
 
     par Concurrent Downloads
         NB->>CDN: Download panel 1
@@ -346,20 +347,21 @@ Examples:
 
 ### `config.py`
 ```python
-from config import BASE_URL, QUALITY_PRESETS, MAX_WORKERS
+from config import OMEGA_BASE_URL, QUALITY_PRESETS, MAX_WORKERS
 
-print(QUALITY_PRESETS["high"])  # (300, "High (300 DPI — print quality)")
-print(MAX_WORKERS)              # 8
+print(OMEGA_BASE_URL)              # https://api.omegascans.org
+print(QUALITY_PRESETS["high"])     # (300, "High (300 DPI — print quality)")
+print(MAX_WORKERS)                 # 8
 ```
 
 ### `fetcher.py`
 ```python
 from fetcher import get_series, get_chapter_images, download_images_concurrent
 
-# Get series info
+# Get series info (calls OmegaScans directly)
 series = get_series("solo-leveling")
 
-# Get chapter image URLs
+# Get chapter image URLs (normalization handled inbuilt)
 chapter = get_chapter_images("solo-leveling", "chapter-1")
 image_urls = chapter["data"]["images"]
 
@@ -424,18 +426,14 @@ send_bytes("BOT_TOKEN", "CHAT_ID", pdf_bytes, "chapter.pdf")
 
 ## API Reference
 
-OmegaPDF uses the [OmegaAPI](https://github.com/Shineii86/OmegaAPI) — a free, public, CORS-enabled API for OmegaScans content.
+OmegaPDF calls the [OmegaScans](https://api.omegascans.org) upstream API directly — no external API server needed. Normalization logic is built in (ported from [OmegaAPI](https://github.com/Shineii86/OmegaAPI)).
 
 | Endpoint | Method | Description |
 |----------|:------:|-------------|
-| `/api/v1/series` | GET | Browse all series (pagination + search) |
-| `/api/v1/series/{slug}` | GET | Series details with embedded chapters |
-| `/api/v1/chapters/{slug}` | GET | Chapter list for a series |
-| `/api/v1/chapter/{slug}/{chapter}` | GET | Chapter images (panel URLs) |
-| `/api/v1/search?q={query}` | GET | Search series by title |
-| `/api/v1/genres` | GET | List available genres |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/stats` | GET | API statistics |
+| `/query?type=series` | GET | Browse all series (pagination + search) |
+| `/series/{slug}` | GET | Series details with enriched metadata |
+| `/chapter/query?series_id={id}` | GET | Chapter list for a series |
+| `/chapter/{slug}/{chapter}` | GET | Chapter images (panel URLs) |
 
 ### Response Format
 
@@ -458,7 +456,7 @@ OmegaPDF uses the [OmegaAPI](https://github.com/Shineii86/OmegaAPI) — a free, 
 }
 ```
 
-> **No authentication required.** CORS enabled. Cached with 5-15 min TTL.
+> **No authentication required.** Direct access to OmegaScans upstream API. Normalization and response formatting handled inbuilt.
 
 ---
 
@@ -467,8 +465,8 @@ OmegaPDF uses the [OmegaAPI](https://github.com/Shineii86/OmegaAPI) — a free, 
 ```mermaid
 flowchart TD
     A["User enters URL or search query"] --> B["Parse URL → extract slug + chapter"]
-    B --> C["GET /api/v1/chapter/{slug}/{ch}"]
-    C --> D["Receive image URL list"]
+    B --> C["GET /chapter/{slug}/{ch} (OmegaScans)"]
+    C --> D["Normalize response (image URLs, metadata)"]
     D --> E["ThreadPoolExecutor downloads panels<br/>(8 concurrent, auto-retry)"]
     E --> F["Pillow assembles images into PDF<br/>(configurable DPI, metadata)"]
     F --> G{Output destination}
@@ -530,7 +528,7 @@ Yes. Clone the repo, install `requirements.txt`, and use the Python modules dire
 | Problem | Cause | Solution |
 |---------|-------|----------|
 | `Chapter not found` | Wrong slug or chapter format | Check the chapter list cell first |
-| `No images found` | API returned empty images array | Chapter may be unavailable or behind a paywall |
+| `No images found` | Upstream returned empty images | Chapter may be unavailable or behind a paywall |
 | `Telegram: chat not found` | Bot hasn't been started | Send `/start` to your bot first |
 | `Telegram: file too large` | PDF exceeds 50 MB limit | Use Low/Medium quality or fewer pages |
 | `Telegram: unauthorized` | Invalid bot token | Regenerate token via @BotFather |
@@ -581,7 +579,7 @@ cd OmegaPDF
 pip install -r requirements.txt
 
 # Test the modules
-python -c "from config import BASE_URL; print(BASE_URL)"
+python -c "from config import OMEGA_BASE_URL; print(OMEGA_BASE_URL)"
 python -c "from fetcher import list_series; print(list_series())"
 ```
 
@@ -594,8 +592,8 @@ python -c "from fetcher import list_series; print(list_series())"
 <td width="50%" valign="top">
 
 ### API
-- [OmegaAPI](https://github.com/Shineii86/OmegaAPI) — Free public API for OmegaScans
-- [OmegaScans](https://omegascans.org) — Manhwa source
+- [OmegaScans](https://omegascans.org) — Manhwa source (called directly)
+- [OmegaAPI](https://github.com/Shineii86/OmegaAPI) — Normalization logic ported inbuilt
 
 </td>
 <td width="50%" valign="top">

@@ -1,14 +1,15 @@
-"""Configuration constants for OmegaPDF."""
+"""Configuration constants for OmegaPDF — calls OmegaScans upstream API directly."""
 
-BASE_URL = "https://omegaapi.vercel.app"
-API_VERSION = "v1"
+# Upstream OmegaScans API (no external OmegaAPI dependency)
+OMEGA_BASE_URL = "https://api.omegascans.org"
+MEDIA_CDN = "https://media.omegascans.org"
 
-# Endpoint templates
-SERIES_ENDPOINT = f"/api/{API_VERSION}/series"
-SERIES_DETAIL_ENDPOINT = f"/api/{API_VERSION}/series/{{slug}}"
-CHAPTERS_ENDPOINT = f"/api/{API_VERSION}/chapters/{{slug}}"
-CHAPTER_DETAIL_ENDPOINT = f"/api/{API_VERSION}/chapter/{{slug}}/{{chapter}}"
-SEARCH_ENDPOINT = f"/api/{API_VERSION}/search"
+# Upstream endpoint templates (raw OmegaScans format)
+UPSTREAM_SERIES_LIST = "/query?type=series&page={page}"
+UPSTREAM_SERIES_SEARCH = "/query?q={query}&type=series&page={page}"
+UPSTREAM_SERIES_DETAIL = "/series/{slug}"
+UPSTREAM_CHAPTERS_LIST = "/chapter/query?page={page}&perPage={per_page}&series_id={series_id}"
+UPSTREAM_CHAPTER_CONTENT = "/chapter/{slug}/{chapter}"
 
 # Defaults
 DEFAULT_PAGE = 1

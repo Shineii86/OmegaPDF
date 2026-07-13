@@ -1,3 +1,15 @@
+## [3.0.0] - 2026-07-13
+- MAJOR: Removed OmegaAPI dependency — now calls OmegaScans upstream API directly
+- Inbuilt normalization logic ported from OmegaAPI (omega.ts → Python)
+- Image URL resolution (relative → full CDN URLs) handled automatically
+- HTML stripping and entity decoding for series descriptions
+- Series list/search normalization with release schedule parsing
+- Chapter content normalization with series metadata
+- Updated config.py: OMEGA_BASE_URL, MEDIA_CDN, upstream endpoint templates
+- Updated fetcher.py: full rewrite with direct OmegaScans integration
+- Updated README.md: architecture diagrams, API reference, module docs
+- Zero external API dependencies — fully self-contained
+
 ## [2.1.0] - 2026-05-25
 - Telegram Bot integration: send PDFs directly to Telegram instead of downloading locally
 - Bot token + chat ID configuration in Setup cell with test connection button
