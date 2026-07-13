@@ -1,12 +1,14 @@
 ## [3.0.0] - 2026-07-13
 - MAJOR: Removed OmegaAPI dependency — now calls OmegaScans upstream API directly
 - Inbuilt normalization logic ported from OmegaAPI (omega.ts → Python)
+- fetcher.py now calls OmegaScans upstream API directly
 - Image URL resolution (relative → full CDN URLs) handled automatically
 - HTML stripping and entity decoding for series descriptions
 - Series list/search normalization with release schedule parsing
 - Chapter content normalization with series metadata
 - Updated config.py: OMEGA_BASE_URL, MEDIA_CDN, upstream endpoint templates
 - Updated fetcher.py: full rewrite with direct OmegaScans integration
+- Updated OmegaPDF.ipynb: all cells now use inbuilt API client
 - Updated README.md: architecture diagrams, API reference, module docs
 - Zero external API dependencies — fully self-contained
 
