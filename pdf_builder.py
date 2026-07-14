@@ -7,25 +7,7 @@ from typing import Optional
 
 from PIL import Image
 
-from config import PDF_FORMAT, PDF_QUALITY, QUALITY_PRESETS, DEFAULT_QUALITY
-
-# Standard PDF page width in points (72 DPI) — A4-ish width for manhwa panels
-_PDF_PAGE_WIDTH_PT = 595  # ~210mm (A4 width)
-
-
-def _fit_image_to_page(img: Image.Image, target_width: int) -> Image.Image:
-    """Resize image so it fills exactly target_width pixels with no extra space.
-
-    For manhwa/manga panels, each image should stretch to full page width
-    with zero margins or gaps between panels.
-    """
-    orig_w, orig_h = img.size
-    if orig_w == target_width:
-        return img
-
-    scale = target_width / orig_w
-    target_height = int(orig_h * scale)
-    return img.resize((target_width, target_height), Image.LANCZOS)
+from config import PDF_QUALITY, QUALITY_PRESETS, DEFAULT_QUALITY
 
 
 def images_to_pdf(
@@ -38,49 +20,99 @@ def images_to_pdf(
 ) -> str:
     """Convert a list of image byte arrays into a single PDF file.
 
-    Each image fills the full page width — zero gaps between panels.
+    Each page is exactly the image size — zero margins, zero gaps.
     """
     if not image_data_list:
         raise ValueError("No images provided for PDF generation")
 
-    dpi, _ = QUALITY_PRESETS.get(quality, QUALITY_PRESETS[DEFAULT_QUALITY])
-
-    # Use a consistent pixel width so all pages align perfectly
-    # Higher DPI = more pixels = sharper output but larger file
-    pixel_width = int(_PDF_PAGE_WIDTH_PT * dpi / 72)
-
-    pages: list[Image.Image] = []
+    # Convert all images to JPEG bytes (consistent format for PDF)
+    jpeg_list: list[bytes] = []
     for img_bytes in image_data_list:
         img = Image.open(io.BytesIO(img_bytes))
         if img.mode == "RGBA":
             img = img.convert("RGB")
-        img = _fit_image_to_page(img, pixel_width)
-        pages.append(img)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=PDF_QUALITY)
+        jpeg_list.append(buf.getvalue())
+        img.close()
 
-    first_page = pages[0]
-    rest_pages = pages[1:] if len(pages) > 1 else []
+    # Build PDF manually — each page = exact image size, no margins
+    from struct import pack
 
-    pdf_info = {}
-    if title:
-        pdf_info["Title"] = title
-    if author:
-        pdf_info["Author"] = author
-    if subject:
-        pdf_info["Subject"] = subject
+    objects: list[bytes] = []
+    offsets: list[int] = []
+    obj_id = 1
 
-    # resolution=72 because we already sized pixels to fill the page exactly
-    first_page.save(
-        output_path,
-        format="PDF",
-        save_all=True,
-        append_images=rest_pages,
-        resolution=72,
-        quality=PDF_QUALITY,
-        pdf_info=pdf_info or None,
+    def add_obj(data: bytes) -> int:
+        nonlocal obj_id
+        offsets.append(sum(len(o) for o in objects) + sum(8 for _ in objects))
+        objects.append(data)
+        current = obj_id
+        obj_id += 1
+        return current
+
+    # Catalog
+    pages_id = add_obj(b"")  # placeholder for Pages
+    catalog_id = add_obj(
+        f"1 0 obj\n<< /Type /Catalog /Pages {pages_id} 0 R >>\nendobj\n".encode()
     )
 
-    for img in pages:
+    # Build page objects
+    page_ids: list[int] = []
+    for jpeg_data in jpeg_list:
+        img = Image.open(io.BytesIO(jpeg_data))
+        w_px, h_px = img.size
         img.close()
+
+        # Page size in points (72 DPI) — exact pixel-to-point mapping
+        w_pt = w_px
+        h_pt = h_px
+
+        img_obj_id = add_obj(
+            f"{obj_id} 0 obj\n<< /Type /XObject /Subtype /Image /Width {w_px} /Height {h_px} "
+            f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {len(jpeg_data)} >>\n"
+            f"stream\n".encode()
+            + jpeg_data
+            + b"\nendstream\nendobj\n"
+        )
+
+        page_id = add_obj(
+            f"2 0 obj\n<< /Type /Page /Parent {pages_id} 0 R "
+            f"/MediaBox [0 0 {w_pt} {h_pt}] "
+            f"/Contents {img_obj_id} 0 R >>\nendobj\n".encode()
+        )
+        page_ids.append(page_id)
+
+    # Fix Pages object
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
+    objects[0] = (
+        f"{pages_id} 0 obj\n<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>\nendobj\n".encode()
+    )
+
+    # Title metadata in Catalog
+    if title:
+        # Escape PDF string special chars
+        safe_title = title.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        objects[catalog_id - 1] = (
+            f"{catalog_id} 0 obj\n<< /Type /Catalog /Pages {pages_id} 0 R "
+            f"/Info {add_obj(f'1 0 obj\n<< /Title ({safe_title}) >>\nendobj\n'.encode())} 0 R >>\nendobj\n".encode()
+        )
+
+    # Assemble PDF
+    header = b"%PDF-1.4\n"
+    body = b"".join(objects)
+    xref_offset = len(header) + len(body)
+
+    xref = b"xref\n"
+    xref += f"0 {obj_id}\n".encode()
+    xref += b"0000000000 65535 f \n"
+    for off in offsets:
+        xref += f"{off:010d} 00000 n \n".encode()
+
+    trailer = f"trailer\n<< /Size {obj_id} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode()
+
+    with open(output_path, "wb") as f:
+        f.write(header + body + xref + trailer)
 
     return output_path
 
