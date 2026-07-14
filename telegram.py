@@ -70,7 +70,7 @@ def send_document(
             _api(bot_token, "sendDocument"),
             data=payload,
             files={"document": (fname, f, "application/pdf")},
-            timeout=120,
+            timeout=300,
         )
 
     data = resp.json()
@@ -113,7 +113,7 @@ def send_bytes(
         _api(bot_token, "sendDocument"),
         data=payload,
         files={"document": (filename, file_bytes, "application/pdf")},
-        timeout=120,
+        timeout=300,
     )
 
     data = resp.json()
