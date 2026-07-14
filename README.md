@@ -215,7 +215,7 @@ sequenceDiagram
     end
     CDN-->>NB: Image bytes
 
-    NB->>PDF: images_to_pdf(bytes, dpi, metadata)
+    NB->>PDF: images_to_pdf(bytes, quality, metadata)
     PDF-->>NB: PDF file
 
     alt Send to Telegram
@@ -379,7 +379,7 @@ images_to_pdf(
     "output.pdf",
     title="Solo Leveling — Chapter 1",
     author="OmegaPDF",
-    dpi=150,
+    quality="medium",
 )
 
 # Merge multiple chapters

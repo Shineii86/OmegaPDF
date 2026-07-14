@@ -11,13 +11,7 @@ UPSTREAM_SERIES_DETAIL = "/series/{slug}"
 UPSTREAM_CHAPTERS_LIST = "/chapter/query?page={page}&perPage={per_page}&series_id={series_id}"
 UPSTREAM_CHAPTER_CONTENT = "/chapter/{slug}/{chapter}"
 
-# Defaults
-DEFAULT_PAGE = 1
-DEFAULT_PER_PAGE = 20
-MAX_PER_PAGE = 100
-
 # PDF settings
-PDF_FORMAT = "JPEG"
 PDF_QUALITY = 90
 
 # Quality presets: (dpi, label)

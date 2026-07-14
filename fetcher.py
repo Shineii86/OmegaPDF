@@ -6,7 +6,6 @@ normalizes responses, and provides concurrent downloads with retries.
 
 from __future__ import annotations
 
-import html
 import re
 import time
 import requests
